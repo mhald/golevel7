@@ -1,4 +1,4 @@
-module github.com/lsarodnik/golevel7
+module github.com/mhald/golevel7
 
 go 1.12
 

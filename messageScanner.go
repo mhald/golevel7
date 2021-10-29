@@ -2,8 +2,9 @@ package golevel7
 
 import (
 	"bufio"
-	"github.com/lsarodnik/golevel7/commons"
 	"io"
+
+	"github.com/mhald/golevel7/commons"
 )
 
 type MessageScanner struct {
