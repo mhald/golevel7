@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"reflect"
+	"strings"
 )
 
 // Encoder writes hl7 messages to a stream
@@ -40,14 +41,32 @@ func (e *Encoder) Encode(it interface{}) error {
 func Marshal(m *Message, it interface{}) ([]byte, error) {
 	st := reflect.ValueOf(it).Elem()
 	stt := st.Type()
+	repeating := false
 	for i := 0; i < st.NumField(); i++ {
 		fld := stt.Field(i)
 		r := fld.Tag.Get("hl7")
-		if r != "" {
-			l := NewLocation(r)
-			val := st.Field(i).String()
-			if err := m.Set(l, val); err != nil {
-				return nil, err
+		parts := strings.Split(r, ",")
+		if len(parts) == 2 {
+			if parts[1] == "repeating" {
+				repeating = true
+				s := Segment{}
+				s.forceField([]rune(parts[0]), 0)
+				m.Segments = append(m.Segments, s)
+			}
+		} else {
+			if repeating {
+				// for repeating fields we need to set the last item in the segment which will be the new segment
+				l := NewLocation(r)
+				val := st.Field(i).String()
+				if err := m.SetLast(l, val); err != nil {
+					return nil, err
+				}
+			} else if r != "" {
+				l := NewLocation(r)
+				val := st.Field(i).String()
+				if err := m.Set(l, val); err != nil {
+					return nil, err
+				}
 			}
 		}
 	}

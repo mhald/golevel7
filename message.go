@@ -65,6 +65,20 @@ func (m *Message) Segment(s string) (*Segment, error) {
 	return nil, fmt.Errorf("Segment not found")
 }
 
+func (m *Message) LastSegment(s string) (*Segment, error) {
+	for i := len(m.Segments) - 1; i >= 0; i-- {
+		seg := m.Segments[i]
+		fld, err := seg.Field(0)
+		if err != nil {
+			continue
+		}
+		if string(fld.Value) == s {
+			return &m.Segments[i], nil
+		}
+	}
+	return nil, fmt.Errorf("Segment not found")
+}
+
 // AllSegments returns the first matching segmane with name s
 func (m *Message) AllSegments(s string) ([]*Segment, error) {
 	segs := []*Segment{}
@@ -148,10 +162,29 @@ func (m *Message) Set(l *Location, val string) error {
 	return nil
 }
 
+func (m *Message) SetLast(l *Location, val string) error {
+	if l.Segment == "" {
+		return errors.New("Segment is required")
+	}
+	seg, err := m.LastSegment(l.Segment)
+	if err != nil {
+		s := Segment{}
+		s.forceField([]rune(l.Segment), 0)
+		s.Set(l, val, &m.Delimeters)
+		m.Segments = append(m.Segments, s)
+	} else {
+		seg.Set(l, val, &m.Delimeters)
+	}
+	m.Value = m.encode()
+	return nil
+}
+
 func (m *Message) parse() error {
 	m.Value = []rune(strings.Trim(string(m.Value), "\n\r\x1c\x0b"))
-	if err := m.parseSep(); err != nil {
-		return err
+	if m.Delimeters.DelimeterField == "" { // BUGFIX: only parse if needed
+		if err := m.parseSep(); err != nil {
+			return err
+		}
 	}
 	r := strings.NewReader(string(m.Value))
 	i := 0
@@ -282,8 +315,48 @@ func (m *Message) Info() (MsgInfo, error) {
 	return mi, err
 }
 
-// ScanSegments is currently NOOP
-func (m *Message) ScanSegments() bool {
+func (m *Message) ScanSegments() []Segment {
+	return m.Segments
+}
 
-	return false
+// Unmarshal fills a structure from an HL7 message
+// It will panic if interface{} is not a pointer to a struct
+// Unmarshal will decode the entire message before trying to set values
+// it will set the first matching segment / first matching field
+// repeating segments and fields is not well suited to this
+// for the moment all unmarshal target fields must be strings
+func (s Segment) Unmarshal(it interface{}) error {
+	st := reflect.ValueOf(it).Elem()
+	stt := st.Type()
+	for i := 0; i < st.NumField(); i++ {
+		fld := stt.Field(i)
+		r := fld.Tag.Get("hl7")
+		if r != "" {
+			if val, _ := s.Find(r); val != "" {
+				if st.Field(i).CanSet() {
+					// TODO support fields other than string
+					//fldT := st.Field(i).Type()
+					st.Field(i).SetString(strings.TrimSpace(val))
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// Find gets a value from a segment using location syntax
+func (s Segment) Find(loc string) (string, error) {
+	return s.Get(NewLocation(loc))
+}
+
+func (s Segment) Name() string {
+	if len(s.Fields) == 0 {
+		return ""
+	}
+	field, err := s.Field(0)
+	if err != nil {
+		return ""
+	}
+	return field.SegName
 }
