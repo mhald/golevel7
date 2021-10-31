@@ -78,9 +78,6 @@ func (d *Decoder) Messages() ([]*Message, error) {
 	z := []*Message{}
 	for _, buf := range bufs {
 		msg := NewMessage(buf)
-		if err := msg.parse(); err != nil {
-			return nil, err
-		}
 		z = append(z, msg)
 	}
 	return z, nil
