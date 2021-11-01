@@ -2,8 +2,9 @@ package golevel7
 
 import (
 	"fmt"
-	"github.com/mhald/golevel7/commons"
 	"strings"
+
+	"github.com/mhald/golevel7/commons"
 )
 
 // Field is an HL7 field
@@ -12,6 +13,10 @@ type Field struct {
 	SeqNum     int
 	Components []Component
 	Value      []rune
+}
+
+func (f *Field) Find(loc string) (string, error) {
+	panic("implement me")
 }
 
 func (f *Field) NumSubFields() int {
@@ -83,6 +88,17 @@ func (f *Field) Get(l *Location) (string, error) {
 		return "", err
 	}
 	return comp.Get(l)
+}
+
+func (f *Field) getObject(l *Location) (ValueGetter, error) {
+	if l.Comp == -1 {
+		return f, nil
+	}
+	comp, err := f.Component(l.Comp)
+	if err != nil {
+		return nil, err
+	}
+	return comp.getObject(l)
 }
 
 // Set will insert a value into a message at Location

@@ -105,10 +105,18 @@ func (m *Message) Find(loc string) (string, error) {
 }
 
 // FindAll gets all values from a message using location syntax
-// finds all occurences of the segments and all repeating fields
+// finds all occurrences of the segments and all repeating fields
 // if the loc is not valid an error is returned
 func (m *Message) FindAll(loc string) ([]string, error) {
 	return m.GetAll(NewLocation(loc))
+}
+
+func (m *Message) findObjects(loc string) ([]ValueGetter, error) {
+	return m.getObjects(NewLocation(loc))
+}
+
+type ValueGetter interface {
+    Get(loc *Location) (string, error)
 }
 
 // Get returns the first value specified by the Location
@@ -136,6 +144,26 @@ func (m *Message) GetAll(l *Location) ([]string, error) {
 	}
 	for _, s := range segs {
 		vs, err := s.GetAll(l)
+		if err != nil {
+			return vals, err
+		}
+		vals = append(vals, vs...)
+	}
+	return vals, nil
+}
+
+func (m *Message) getObjects(l *Location) ([]ValueGetter, error) {
+	vals := []ValueGetter{}
+	if l.Segment == "" {
+		vals = append(vals, m)
+		return vals, nil
+	}
+	segs, err := m.AllSegments(l.Segment)
+	if err != nil {
+		return vals, err
+	}
+	for _, s := range segs {
+		vs, err := s.getObjects(l)
 		if err != nil {
 			return vals, err
 		}
@@ -294,6 +322,81 @@ func (m *Message) Unmarshal(it interface{}) error {
 	for i := 0; i < st.NumField(); i++ {
 		fld := stt.Field(i)
 		r := fld.Tag.Get("hl7")
+		if fld.Type.Kind() == reflect.Slice {
+			//
+			// We are unmarshalling into a slice, so we will create the slice, find the relevant objects via the
+			// hl7 tag, and then iterating over the associated struct to creating new slice elements populated
+			// with the desired hl7 data.
+			//
+			// Limitations:
+			// - original struct cannot use pointers to the slice elements (eg []Foo and not []*Foo)
+			// - only supports one level of nesting
+			// - only supports string fields
+			//
+			slice := reflect.MakeSlice(fld.Type, 0, 0)
+			valuePtr := reflect.New(fld.Type.Elem()).Elem()
+			if r != "" {
+				tagParts := strings.Split(r, ",")
+				objs, err := m.findObjects(tagParts[0])
+				if err != nil {
+					return err
+				}
+
+				for _, obj := range objs {
+					newSliceObj := reflect.ValueOf(valuePtr.Addr().Interface()).Elem()
+					newSliceObjType := newSliceObj.Type()
+					for sliceFieldIdx := 0; sliceFieldIdx < newSliceObj.NumField(); sliceFieldIdx++ {
+						sliceField := newSliceObjType.Field(sliceFieldIdx)
+						sliceFieldTag := sliceField.Tag.Get("hl7")
+						newVal, err := obj.Get(NewLocation(sliceFieldTag))
+						if err != nil {
+							return err
+						}
+						newSliceObj.Field(sliceFieldIdx).SetString(strings.TrimSpace(newVal)) // TODO: support fields other than string
+					}
+					slice = reflect.Append(slice, newSliceObj)
+				}
+			}
+			st.Field(i).Set(slice)
+			continue
+		}
+		if r != "" {
+			if val, _ := m.Find(r); val != "" {
+				if st.Field(i).CanSet() {
+					// TODO support fields other than string
+					//fldT := st.Field(i).Type()
+					st.Field(i).SetString(strings.TrimSpace(val))
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func has(i []string, s string) bool {
+	for idx := range i {
+		if i[idx] == s {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *Message) unmarshalSlice(it interface{}) error {
+	st := reflect.ValueOf(it).Elem()
+	stt := st.Type()
+	for i := 0; i < st.NumField(); i++ {
+		fld := stt.Field(i)
+		r := fld.Tag.Get("hl7")
+		fmt.Printf("XXX %s %s %s %s\n", r, fld.Name, fld.Type, fld.Type.Kind())
+		if fld.Type.Kind() == reflect.Slice {
+			fmt.Printf("XXX is array\n")
+			slice := reflect.New(fld.Type)
+			// m.unmarshalSlice(slice.Pointer())
+			st.Field(i).Set(slice)
+			continue
+		}
 		if r != "" {
 			if val, _ := m.Find(r); val != "" {
 				if st.Field(i).CanSet() {
@@ -317,6 +420,20 @@ func (m *Message) Info() (MsgInfo, error) {
 
 func (m *Message) ScanSegments() []Segment {
 	return m.Segments
+}
+
+func (m *Message) FieldStringToComponents(val string) []Component {
+	ret := []Component{}
+	ret = append(ret, Component{}) // root component
+	parts := strings.Split(val, string(m.Delimeters.Component))
+	for idx := range parts {
+		ret = append(ret, Component{
+			SubComponents: nil,
+			Value: []rune(parts[idx]),
+		})
+		fmt.Printf("setting field %i to %s\n", idx, parts[idx])
+	}
+	return ret
 }
 
 // Unmarshal fills a structure from an HL7 message

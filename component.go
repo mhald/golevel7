@@ -11,6 +11,10 @@ type Component struct {
 	Value         []rune
 }
 
+func (c *Component) Find(loc string) (string, error) {
+	panic("implement me")
+}
+
 func (c *Component) String() string {
 	var str string
 	for _, s := range c.SubComponents {
@@ -70,6 +74,17 @@ func (c *Component) Get(l *Location) (string, error) {
 		return "", err
 	}
 	return string(sc.Value), nil
+}
+
+func (c *Component) getObject(l *Location) (ValueGetter, error) {
+	if l.SubComp == -1 {
+		return c, nil
+	}
+	sc, err := c.SubComponent(l.SubComp)
+	if err != nil {
+		return nil, err
+	}
+	return sc, nil
 }
 
 // Set will insert a value into a message at Location

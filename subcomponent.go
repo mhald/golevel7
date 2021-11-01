@@ -4,3 +4,7 @@ package golevel7
 type SubComponent struct {
 	Value []rune
 }
+
+func (s SubComponent) Get(loc *Location) (string, error) {
+	return string(s.Value), nil
+}

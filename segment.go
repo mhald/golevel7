@@ -188,6 +188,26 @@ func (s *Segment) GetAll(l *Location) ([]string, error) {
 	return vals, nil
 }
 
+func (s *Segment) getObjects(l *Location) ([]ValueGetter, error) {
+	vals := []ValueGetter{}
+	if l.FieldSeq == -1 {
+		vals = append(vals, s)
+		return vals, nil
+	}
+	flds, err := s.AllFields(l.FieldSeq)
+	if err != nil {
+		return vals, err
+	}
+	for _, f := range flds {
+		v, err := f.getObject(l)
+		if err != nil {
+			return vals, err
+		}
+		vals = append(vals, v)
+	}
+	return vals, nil
+}
+
 // Set will insert a value into a message at Location
 func (s *Segment) Set(l *Location, val string, seps *Delimeters) error {
 	if l.FieldSeq == -1 {
