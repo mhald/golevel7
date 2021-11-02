@@ -11,8 +11,12 @@ type Component struct {
 	Value         []rune
 }
 
-func (c *Component) Find(loc string) (string, error) {
-	panic("implement me")
+func (c *Component) GetAll(loc *Location) ([]string, error) {
+	val, err := c.Get(loc)
+	if err != nil {
+		return nil, err
+	}
+	return []string{val}, nil
 }
 
 func (c *Component) String() string {

@@ -117,6 +117,7 @@ func (m *Message) findObjects(loc string) ([]ValueGetter, error) {
 
 type ValueGetter interface {
     Get(loc *Location) (string, error)
+	GetAll(loc *Location) ([]string, error)
 }
 
 // Get returns the first value specified by the Location
@@ -310,6 +311,8 @@ func (m *Message) IsValid(val []Validation) (bool, []Validation) {
 	return valid, failures
 }
 
+var stringArray []string
+
 // Unmarshal fills a structure from an HL7 message
 // It will panic if interface{} is not a pointer to a struct
 // Unmarshal will decode the entire message before trying to set values
@@ -348,11 +351,31 @@ func (m *Message) Unmarshal(it interface{}) error {
 					for sliceFieldIdx := 0; sliceFieldIdx < newSliceObj.NumField(); sliceFieldIdx++ {
 						sliceField := newSliceObjType.Field(sliceFieldIdx)
 						sliceFieldTag := sliceField.Tag.Get("hl7")
-						newVal, err := obj.Get(NewLocation(sliceFieldTag))
-						if err != nil {
-							return err
+
+						location := strings.Split(sliceFieldTag, ",")[0]
+						if sliceField.Type.Kind() == reflect.String {
+							newVal, err := obj.Get(NewLocation(location))
+							if err != nil {
+								return err
+							}
+							newSliceObj.Field(sliceFieldIdx).SetString(strings.TrimSpace(newVal)) // TODO: support fields other than string
+							continue
 						}
-						newSliceObj.Field(sliceFieldIdx).SetString(strings.TrimSpace(newVal)) // TODO: support fields other than string
+
+						if sliceField.Type.Kind() == reflect.Slice {
+							if reflect.SliceOf(sliceField.Type.Elem()) == reflect.TypeOf(stringArray) {
+								vals, err := obj.GetAll(NewLocation(location))
+								if err != nil {
+									return err
+								}
+								stringSlice := reflect.MakeSlice(reflect.TypeOf(stringArray), len(vals), len(vals))
+								for idx := range vals {
+									stringSlice.Index(idx).Set(reflect.ValueOf(strings.TrimSpace(vals[idx])))
+								}
+								newSliceObj.Field(sliceFieldIdx).Set(stringSlice)
+							}
+							continue
+						}
 					}
 					slice = reflect.Append(slice, newSliceObj)
 				}
@@ -381,34 +404,6 @@ func has(i []string, s string) bool {
 		}
 	}
 	return false
-}
-
-func (m *Message) unmarshalSlice(it interface{}) error {
-	st := reflect.ValueOf(it).Elem()
-	stt := st.Type()
-	for i := 0; i < st.NumField(); i++ {
-		fld := stt.Field(i)
-		r := fld.Tag.Get("hl7")
-		fmt.Printf("XXX %s %s %s %s\n", r, fld.Name, fld.Type, fld.Type.Kind())
-		if fld.Type.Kind() == reflect.Slice {
-			fmt.Printf("XXX is array\n")
-			slice := reflect.New(fld.Type)
-			// m.unmarshalSlice(slice.Pointer())
-			st.Field(i).Set(slice)
-			continue
-		}
-		if r != "" {
-			if val, _ := m.Find(r); val != "" {
-				if st.Field(i).CanSet() {
-					// TODO support fields other than string
-					//fldT := st.Field(i).Type()
-					st.Field(i).SetString(strings.TrimSpace(val))
-				}
-			}
-		}
-	}
-
-	return nil
 }
 
 // Info returns the MsgInfo for the message

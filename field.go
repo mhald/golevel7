@@ -15,8 +15,12 @@ type Field struct {
 	Value      []rune
 }
 
-func (f *Field) Find(loc string) (string, error) {
-	panic("implement me")
+func (f *Field) GetAll(loc *Location) ([]string, error) {
+	val, err := f.Get(loc)
+	if err != nil {
+		return nil, err
+	}
+	return []string{val}, nil
 }
 
 func (f *Field) NumSubFields() int {
