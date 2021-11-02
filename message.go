@@ -324,8 +324,43 @@ func (m *Message) Unmarshal(it interface{}) error {
 	stt := st.Type()
 	for i := 0; i < st.NumField(); i++ {
 		fld := stt.Field(i)
+
+		if !st.Field(i).CanSet() {
+			continue
+		}
+
 		r := fld.Tag.Get("hl7")
-		if fld.Type.Kind() == reflect.Slice {
+		if r == "" {
+			continue
+		}
+
+		if st.Field(i).Kind() == reflect.String {
+			if val, _ := m.Find(r); val != "" {
+				st.Field(i).SetString(strings.TrimSpace(val))
+			}
+			continue
+		}
+
+		if st.Field(i).Kind() == reflect.Slice {
+			if fld.Type == reflect.TypeOf(stringArray) {
+				location := strings.Split(r, ",")[0]
+				vals, err := m.GetAll(NewLocation(location))
+				if err != nil {
+					return err
+				}
+				stringSlice := reflect.MakeSlice(reflect.TypeOf(stringArray), len(vals), len(vals))
+				for idx := range vals {
+					stringSlice.Index(idx).Set(reflect.ValueOf(strings.TrimSpace(vals[idx])))
+				}
+				st.Field(i).Set(stringSlice)
+				continue
+			}
+		}
+
+		if st.Field(i).Type().Kind() == reflect.Slice {
+			// TODO: add check to ensure that the slice is a struct and not a string (which is handled above)
+			// TODO: recurse back into this function to allow arbitrary nesting of structs
+
 			//
 			// We are unmarshalling into a slice, so we will create the slice, find the relevant objects via the
 			// hl7 tag, and then iterating over the associated struct to creating new slice elements populated
@@ -336,8 +371,8 @@ func (m *Message) Unmarshal(it interface{}) error {
 			// - only supports one level of nesting
 			// - only supports string fields
 			//
-			slice := reflect.MakeSlice(fld.Type, 0, 0)
-			valuePtr := reflect.New(fld.Type.Elem()).Elem()
+			slice := reflect.MakeSlice(st.Field(i).Type(), 0, 0)
+			valuePtr := reflect.New(st.Field(i).Type().Elem()).Elem()
 			if r != "" {
 				tagParts := strings.Split(r, ",")
 				objs, err := m.findObjects(tagParts[0])
@@ -383,27 +418,9 @@ func (m *Message) Unmarshal(it interface{}) error {
 			st.Field(i).Set(slice)
 			continue
 		}
-		if r != "" {
-			if val, _ := m.Find(r); val != "" {
-				if st.Field(i).CanSet() {
-					// TODO support fields other than string
-					//fldT := st.Field(i).Type()
-					st.Field(i).SetString(strings.TrimSpace(val))
-				}
-			}
-		}
 	}
 
 	return nil
-}
-
-func has(i []string, s string) bool {
-	for idx := range i {
-		if i[idx] == s {
-			return true
-		}
-	}
-	return false
 }
 
 // Info returns the MsgInfo for the message
