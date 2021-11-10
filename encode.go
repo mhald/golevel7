@@ -56,13 +56,13 @@ func Marshal(m *Message, it interface{}) ([]byte, error) {
 		} else {
 			if repeating {
 				// for repeating fields we need to set the last item in the segment which will be the new segment
-				l := NewLocation(r)
+				l := fixZeroOffset(NewLocation(r))
 				val := st.Field(i).String()
 				if err := m.SetLast(l, val); err != nil {
 					return nil, err
 				}
 			} else if r != "" {
-				l := NewLocation(r)
+				l := fixZeroOffset(NewLocation(r))
 				val := st.Field(i).String()
 				if err := m.Set(l, val); err != nil {
 					return nil, err
@@ -78,4 +78,21 @@ func Marshal(m *Message, it interface{}) ([]byte, error) {
 	m.Value = []rune(string(msg))
 
 	return msg, nil
+}
+
+// Compensate for the fact that marshall should use non-zero offsets for the component and subcomponent locations.
+func fixZeroOffset(location *Location) *Location {
+	newLoc := &Location{
+		Segment:  location.Segment,
+		FieldSeq: location.FieldSeq,
+		Comp:     -1,
+		SubComp:  -1,
+	}
+	if location.Comp > 0 {
+        newLoc.Comp = location.Comp - 1
+    }
+	if location.SubComp > 0 {
+        newLoc.SubComp = location.SubComp - 1
+    }
+	return newLoc
 }
