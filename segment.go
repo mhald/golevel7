@@ -110,7 +110,7 @@ func (s *Segment) forceField(val []rune, seq int) {
 	if seq > s.maxSeq {
 		s.maxSeq = seq
 	}
-	fld := Field{Value: val, SeqNum: seq, SegName: "MSH"}
+	fld := Field{Value: val, SeqNum: seq, SegName: string(val)}
 	cmp := Component{Value: val}
 	cmp.SubComponents = append(cmp.SubComponents, SubComponent{Value: val})
 	fld.Components = append(fld.Components, cmp)
