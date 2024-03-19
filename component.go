@@ -104,3 +104,7 @@ func (c *Component) Set(l *Location, val string, seps *Delimeters) error {
 	c.Value = c.encode(seps)
 	return nil
 }
+
+func (c *Component) RelativeLocation(tag string) *Location {
+	return &Location{SubComp: 1}
+}

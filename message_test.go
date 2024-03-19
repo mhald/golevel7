@@ -139,22 +139,25 @@ type MessageHeader struct {
 }
 
 type MessageType struct {
-	segment          struct{} `hl7:"MSH.9"`
-	MessageCode      string   `hl7:"MSH.9.1"`
-	TriggerEvent     string   `hl7:"MSH.9.2"`
-	MessageStructure string   `hl7:"MSH.9.3"`
+	segment          struct{} `hl7:"MSG"`
+	MessageCode      string   `hl7:"MSG.1"`
+	TriggerEvent     string   `hl7:"MSG.2"`
+	MessageStructure string   `hl7:"MSG.3"`
 }
 
 type PatientVisit struct {
 	segment         struct{}                `hl7:"PV1"`
 	PatientClass    string                  `hl7:"PV1.2"`
 	Location        AssignedPatientLocation `hl7:"PV1.3"`
+	FullLocation    string                  `hl7:"PV1.3"`
 	AttendingDoctor []PersonIdentifier      `hl7:"PV1.7"`
 }
 
 type PersonIdentifier struct {
-	segment            struct{} `hl7:"PID.3.repeating"`
-	PersonalIdentifier string   `hl7:"PID.3.1"`
+	segment            struct{} `hl7:"XCN,repeating"`
+	PersonalIdentifier string   `hl7:"XCN.1"`
+	AssigningAuthority string   `hl7:"XCN.9"`
+	IdentifierTypeCode string   `hl7:"XCN.13"`
 }
 
 type OBRMessage struct {
@@ -196,7 +199,6 @@ func TestTaggedStructParsing(t *testing.T) {
 	}
 
 	assert.Equal(t, 1, len(msgs))
-	// t.Logf("msgs: %#v", msgs[0])
 
 	t.Log("Unmarshalling")
 	obr := &OBRMessage{}
@@ -204,13 +206,13 @@ func TestTaggedStructParsing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("obr: %#v", obr)
 
-	t.Logf("Header: %#v", obr.Header)
-	t.Logf("Visit: %#v", obr.Visit)
-	for _, obx := range obr.Observations {
-		t.Logf("obx: %#v", obx)
-	}
+	// t.Logf("obr: %#v", obr)
+	// t.Logf("Header: %#v", obr.Header)
+	// t.Logf("Visit: %#v", obr.Visit)
+	// for _, obx := range obr.Observations {
+	// 	t.Logf("obx: %#v", obx)
+	// }
 
 	assert.Equal(t, "ADT1", obr.Header.SendingApp)
 	assert.Equal(t, "MCM", obr.Header.SendingFacility)
@@ -239,6 +241,9 @@ func TestTaggedStructParsing(t *testing.T) {
 	assert.Equal(t, "D", role.RoleActionCode)
 	assert.Equal(t, "Consult MD", role.Role)
 	assert.Equal(t, 1, len(role.RolePersons))
+	assert.Equal(t, "LFA", role.RolePersons[0].PersonalIdentifier)
+	assert.Equal(t, "EHR1", role.RolePersons[0].AssigningAuthority)
+	assert.Equal(t, "EHR_ID", role.RolePersons[0].IdentifierTypeCode)
 
 	role = obr.Roles[2]
 	assert.Equal(t, "3", role.RoleInstanceId)
@@ -262,4 +267,5 @@ func TestTaggedStructParsing(t *testing.T) {
 	assert.Equal(t, "2012", obr.Visit.Location.Room)
 	assert.Equal(t, "01", obr.Visit.Location.Bed)
 	assert.Equal(t, "", obr.Visit.Location.Facility)
+	assert.Equal(t, "2000^2012^01", obr.Visit.FullLocation)
 }
