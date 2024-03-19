@@ -136,6 +136,7 @@ type MessageHeader struct {
 	VersionID                     string      `hl7:"MSH.12"`
 	AcceptAcknowledgmentType      string      `hl7:"MSH.15"`
 	ApplicationAcknowledgmentType string      `hl7:"MSH.16"`
+	NoSuchValue                   string      `hl7:"MSH.99"`
 }
 
 type MessageType struct {

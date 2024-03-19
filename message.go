@@ -55,8 +55,8 @@ func (m *Message) String() string {
 // Segment returns the first matching segment with name s
 func (m *Message) Segment(s string) (*Segment, error) {
 	for i, seg := range m.Segments {
-		fld, err := seg.Field(0)
-		if err != nil {
+		fld := seg.Field(0)
+		if fld == nil {
 			continue
 		}
 		if string(fld.Value) == s {
@@ -69,8 +69,8 @@ func (m *Message) Segment(s string) (*Segment, error) {
 func (m *Message) LastSegment(s string) (*Segment, error) {
 	for i := len(m.Segments) - 1; i >= 0; i-- {
 		seg := m.Segments[i]
-		fld, err := seg.Field(0)
-		if err != nil {
+		fld := seg.Field(0)
+		if fld == nil {
 			continue
 		}
 		if string(fld.Value) == s {
@@ -84,8 +84,8 @@ func (m *Message) LastSegment(s string) (*Segment, error) {
 func (m *Message) AllSegments(s string) ([]*Segment, error) {
 	segs := []*Segment{}
 	for i, seg := range m.Segments {
-		fld, err := seg.Field(0)
-		if err != nil {
+		fld := seg.Field(0)
+		if fld == nil {
 			continue
 		}
 		if string(fld.Value) == s {
@@ -747,8 +747,8 @@ func (s Segment) Name() string {
 	if len(s.Fields) == 0 {
 		return ""
 	}
-	field, err := s.Field(0)
-	if err != nil {
+	field:= s.Field(0)
+	if field == nil {
 		return ""
 	}
 	return field.SegName
