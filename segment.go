@@ -138,7 +138,7 @@ func (s *Segment) Field(i int) (*Field, error) {
 			return &s.Fields[idx], nil
 		}
 	}
-	return nil, fmt.Errorf("Field not found")
+	return nil, fmt.Errorf("field %d not found", i)
 }
 
 // AllFields returns all fields with sequence number i
@@ -150,7 +150,7 @@ func (s *Segment) AllFields(i int) ([]*Field, error) {
 		}
 	}
 	if len(flds) == 0 {
-		return flds, fmt.Errorf("Field not found")
+		return flds, fmt.Errorf("Field %d not found", i)
 	}
 	return flds, nil
 }
