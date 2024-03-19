@@ -34,8 +34,8 @@ func (s *Segment) isMSH() bool {
 	if len(s.Value) >= 3 {
 		toCheck = s.Value[:3]
 	} else if len(s.Fields) != 0 {
-		f, err := s.Field(0)
-		if err != nil {
+		f := s.Field(0)
+		if f == nil {
 			return false
 		}
 		toCheck = f.Value[:3]
@@ -132,13 +132,13 @@ func (s *Segment) encode(seps *Delimeters) []rune {
 }
 
 // Field returns the field with sequence number i
-func (s *Segment) Field(i int) (*Field, error) {
+func (s *Segment) Field(i int) *Field {
 	for idx, fld := range s.Fields {
 		if fld.SeqNum == i {
-			return &s.Fields[idx], nil
+			return &s.Fields[idx]
 		}
 	}
-	return nil, fmt.Errorf("field %d not found", i)
+	return nil
 }
 
 // AllFields returns all fields with sequence number i
@@ -160,9 +160,9 @@ func (s *Segment) Get(l *Location) (string, error) {
 	if l.FieldSeq == -1 {
 		return string(s.Value), nil
 	}
-	fld, err := s.Field(l.FieldSeq)
-	if err != nil {
-		return "", err
+	fld := s.Field(l.FieldSeq)
+	if fld == nil {
+		return "", nil
 	}
 	return fld.Get(l)
 }
@@ -218,11 +218,11 @@ func (s *Segment) Set(l *Location, val string, seps *Delimeters) error {
 			s.forceField([]rune(""), i)
 		}
 	}
-	fld, err := s.Field(l.FieldSeq)
-	if err != nil {
-		return err
+	fld := s.Field(l.FieldSeq)
+	if fld == nil {
+		return nil
 	}
-	err = fld.Set(l, val, seps)
+	err := fld.Set(l, val, seps)
 	if err != nil {
 		return err
 	}
