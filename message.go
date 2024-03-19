@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"golang.org/x/net/html/charset"
@@ -51,7 +52,7 @@ func (m *Message) String() string {
 	return str
 }
 
-// Segment returns the first matching segmane with name s
+// Segment returns the first matching segment with name s
 func (m *Message) Segment(s string) (*Segment, error) {
 	for i, seg := range m.Segments {
 		fld, err := seg.Field(0)
@@ -313,6 +314,254 @@ func (m *Message) IsValid(val []Validation) (bool, []Validation) {
 
 var stringArray []string
 
+func (m *Message) ToStruct(v interface{}) error {
+	return unmarshalMessageStruct(reflect.ValueOf(v), m)
+}
+
+
+// levels of a HL7 message are as follows:
+// - message
+// - segment
+// - field
+// - component
+// - subcomponent
+
+func unmarshalMessageStruct(v reflect.Value, m *Message) error {
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+
+	// Ensure we're dealing with a struct
+	if v.Kind() != reflect.Struct {
+		return nil // Or an appropriate error
+	}
+
+	for i := 0; i < v.NumField(); i++ {
+		field := v.Field(i)
+		fieldType := v.Type().Field(i)
+		hl7Tag := fieldType.Tag.Get("hl7")
+
+		if hl7Tag != "" {
+			segmentName := strings.Split(hl7Tag, ".")[0]
+
+			segments, err := m.AllSegments(segmentName)
+			if err != nil {
+				continue
+			}
+
+			for _, segment := range segments {
+				// For simple string fields, just find and set
+				if field.Kind() == reflect.String {
+					if val, _ := segment.Find(hl7Tag); val != "" {
+						field.SetString(strings.TrimSpace(val))
+					}
+				} else if field.Kind() == reflect.Struct {
+					// Recurse for nested structs
+					err := unmarshalSegmentStruct(field.Addr(), segment)
+					if err != nil {
+						return err
+					}
+				} else if field.Kind() == reflect.Slice && field.Type().Elem().Kind() == reflect.Struct {
+					// Handle slice of structs
+					elementType := field.Type().Elem()
+					for {
+						// Assuming a way to iterate over or determine the correct segment(s) for this slice
+						// This part is highly dependent on your data structure and HL7 message format
+						newElementPtr := reflect.New(elementType)
+						err := unmarshalSegmentStruct(newElementPtr, segment)
+						if err != nil {
+							break // or handle the error as needed
+						}
+						field.Set(reflect.Append(field, newElementPtr.Elem()))
+						break
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func unmarshalSegmentStruct(addr reflect.Value, s *Segment) error {
+	for i := 0; i < addr.Elem().NumField(); i++ {
+		field := addr.Elem().Field(i)
+		fieldType := addr.Elem().Type().Field(i)
+		hl7Tag := fieldType.Tag.Get("hl7")
+
+		if hl7Tag != "" {
+			// For simple string fields, just find and set
+			if field.Kind() == reflect.String {
+				if val, _ := s.Find(hl7Tag); val != "" {
+					field.SetString(strings.TrimSpace(val))
+				}
+			} else {
+				// get the last . part of the tag 
+				parts := strings.Split(hl7Tag, ".")
+				addrFieldIdString := parts[len(parts)-1]
+				addrFieldId, err := strconv.Atoi(addrFieldIdString)
+				if err != nil {
+					continue
+				}
+				allFields, err := s.AllFields(addrFieldId)
+				if err != nil {
+					continue
+				}
+
+				for _, f := range allFields {
+					if field.Kind() == reflect.Struct {
+						// Recurse for nested structs
+						err = unmarshalFieldStruct(field.Addr(), f)
+						if err != nil {
+							return err
+						}
+					} else if field.Kind() == reflect.Slice && field.Type().Elem().Kind() == reflect.Struct {
+						// Handle slice of structs
+						elementType := field.Type().Elem()
+
+						for {
+							// Assuming a way to iterate over or determine the correct segment(s) for this slice
+							// This part is highly dependent on your data structure and HL7 message format
+							newElementPtr := reflect.New(elementType)
+							err := unmarshalFieldStruct(newElementPtr, f)
+							if err != nil {
+								break // or handle the error as needed
+							}
+							field.Set(reflect.Append(field, newElementPtr.Elem()))
+							break
+						}
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func unmarshalFieldStruct(ptr reflect.Value, f *Field) error {
+	for i := 0; i < ptr.Elem().NumField(); i++ {
+		component := ptr.Elem().Field(i)
+		componentType := ptr.Elem().Type().Field(i)
+		hl7Tag := componentType.Tag.Get("hl7")
+
+		if hl7Tag != "" {
+			// For simple string fields, just find and set
+			if component.Kind() == reflect.String {
+				if val, _ := f.Get(NewLocation(hl7Tag)); val != "" {
+					component.SetString(strings.TrimSpace(val))
+				}
+			} else {
+				// get the last . part of the tag
+				parts := strings.Split(hl7Tag, ".")
+				addrFieldIdString := parts[len(parts)-1]
+				addrFieldId, err := strconv.Atoi(addrFieldIdString)
+				if err != nil {
+					continue
+				}
+
+				c, err := f.Component(addrFieldId)
+				if err != nil {
+					continue
+				}
+
+				if component.Kind() == reflect.Struct {
+					// Recurse for nested structs
+					err = unmarshalComponentStruct(component.Addr(), c)
+					if err != nil {
+						return err
+					}
+				} else if component.Kind() == reflect.Slice && component.Type().Elem().Kind() == reflect.Struct {
+					// Handle slice of structs
+					elementType := component.Type().Elem()
+
+					for {
+						// Assuming a way to iterate over or determine the correct segment(s) for this slice
+						// This part is highly dependent on your data structure and HL7 message format
+						newElementPtr := reflect.New(elementType)
+						err := unmarshalComponentStruct(newElementPtr, c)
+						if err != nil {
+							break // or handle the error as needed
+						}
+						component.Set(reflect.Append(component, newElementPtr.Elem()))
+						break
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func unmarshalComponentStruct(addr reflect.Value, c *Component) error {
+	for i := 0; i < addr.Elem().NumField(); i++ {
+		subcomponent := addr.Elem().Field(i)
+		subcomponentType := addr.Elem().Type().Field(i)
+		hl7Tag := subcomponentType.Tag.Get("hl7")
+
+		if hl7Tag != "" {
+			// For simple string fields, just find and set
+			if subcomponent.Kind() == reflect.String {
+				if val, _ := c.Get(NewLocation(hl7Tag)); val != "" {
+					subcomponent.SetString(strings.TrimSpace(val))
+				}
+			} else {
+				// get the last . part of the tag
+				parts := strings.Split(hl7Tag, ".")
+				addrFieldIdString := parts[len(parts)-1]
+				addrFieldId, err := strconv.Atoi(addrFieldIdString)
+				if err != nil {
+					continue
+				}
+				sc, err := c.SubComponent(addrFieldId)
+				if err != nil {
+					continue
+				}
+
+				if subcomponent.Kind() == reflect.Struct {
+					// Recurse for nested structs
+					err = unmarshalSubComponentStruct(subcomponent.Addr(), sc)
+					if err != nil {
+						return err
+					}
+				} else if subcomponent.Kind() == reflect.Slice && subcomponent.Type().Elem().Kind() == reflect.Struct {
+					// Handle slice of structs
+					elementType := subcomponent.Type().Elem()
+
+					for {
+						// Assuming a way to iterate over or determine the correct segment(s) for this slice
+						// This part is highly dependent on your data structure and HL7 message format
+						newElementPtr := reflect.New(elementType)
+						err := unmarshalSubComponentStruct(newElementPtr, sc)
+						if err != nil {
+							break // or handle the error as needed
+						}
+						subcomponent.Set(reflect.Append(subcomponent, newElementPtr.Elem()))
+						break
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func unmarshalSubComponentStruct(ptr reflect.Value, sc *SubComponent) error {
+	for i := 0; i < ptr.Elem().NumField(); i++ {
+		field := ptr.Elem().Field(i)
+		fieldType := ptr.Elem().Type().Field(i)
+		hl7Tag := fieldType.Tag.Get("hl7")
+
+		if hl7Tag != "" {
+			// For simple string fields, just find and set
+			if field.Kind() == reflect.String {
+				if val, _ := sc.Get(NewLocation(hl7Tag)); val != "" {
+					field.SetString(strings.TrimSpace(val))
+				}
+			}
+		}
+	}
+	return nil
+}
+
 // Unmarshal fills a structure from an HL7 message
 // It will panic if interface{} is not a pointer to a struct
 // Unmarshal will decode the entire message before trying to set values
@@ -443,7 +692,6 @@ func (m *Message) FieldStringToComponents(val string) []Component {
 			SubComponents: nil,
 			Value: []rune(parts[idx]),
 		})
-		fmt.Printf("setting field %i to %s\n", idx, parts[idx])
 	}
 	return ret
 }
@@ -464,8 +712,21 @@ func (s Segment) Unmarshal(it interface{}) error {
 			if val, _ := s.Find(r); val != "" {
 				if st.Field(i).CanSet() {
 					// TODO support fields other than string
-					//fldT := st.Field(i).Type()
-					st.Field(i).SetString(strings.TrimSpace(val))
+					fldT := st.Field(i).Type()
+					switch fldT.Kind() {
+					case reflect.String:
+						st.Field(i).SetString(strings.TrimSpace(val))
+					// detect if this is a slice or a pointer to a slice
+					case reflect.Slice:
+						obj := reflect.New(fldT.Elem())
+						st.Field(i).Set(obj)
+					case reflect.Ptr:
+						// instantiate a new slice and set the pointer to it
+						obj := reflect.New(fldT.Elem())
+						st.Field(i).Set(obj)
+					default:
+						// TODO: support other types
+					}
 				}
 			}
 		}
