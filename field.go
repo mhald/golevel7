@@ -2,6 +2,7 @@ package golevel7
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/mhald/golevel7/commons"
@@ -120,4 +121,24 @@ func (f *Field) Set(l *Location, val string, seps *Delimeters) error {
 	}
 	f.Value = f.encode(seps)
 	return nil
+}
+
+func (f *Field) BaseLocation() *Location {
+	return &Location{
+		Segment:  f.SegName,
+		FieldSeq: f.SeqNum,
+	}
+}
+
+func (f *Field) RelativeLocation(tag string) *Location {
+	location := f.BaseLocation()
+	parts := strings.Split(tag, ".")
+	comp, err := strconv.Atoi(parts[len(parts)-1])
+	if err != nil {
+		fmt.Printf("Error parsing component: %v\n", err)
+		return nil
+	}
+	location.Comp = comp
+	location.SubComp = 1
+	return location
 }

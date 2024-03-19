@@ -446,7 +446,8 @@ func unmarshalFieldStruct(ptr reflect.Value, f *Field) error {
 		if hl7Tag != "" {
 			// For simple string fields, just find and set
 			if component.Kind() == reflect.String {
-				if val, _ := f.Get(NewLocation(hl7Tag)); val != "" {
+				location := f.RelativeLocation(hl7Tag)
+				if val, _ := f.Get(location); val != "" {
 					component.SetString(strings.TrimSpace(val))
 				}
 			} else {
@@ -500,7 +501,8 @@ func unmarshalComponentStruct(addr reflect.Value, c *Component) error {
 		if hl7Tag != "" {
 			// For simple string fields, just find and set
 			if subcomponent.Kind() == reflect.String {
-				if val, _ := c.Get(NewLocation(hl7Tag)); val != "" {
+				location := c.RelativeLocation(hl7Tag)
+				if val, _ := c.Get(location); val != "" {
 					subcomponent.SetString(strings.TrimSpace(val))
 				}
 			} else {
@@ -553,7 +555,8 @@ func unmarshalSubComponentStruct(ptr reflect.Value, sc *SubComponent) error {
 		if hl7Tag != "" {
 			// For simple string fields, just find and set
 			if field.Kind() == reflect.String {
-				if val, _ := sc.Get(NewLocation(hl7Tag)); val != "" {
+				location := sc.RelativeLocation(hl7Tag)
+				if val, _ := sc.Get(location); val != "" {
 					field.SetString(strings.TrimSpace(val))
 				}
 			}
