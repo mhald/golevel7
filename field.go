@@ -90,7 +90,7 @@ func (f *Field) Get(l *Location) (string, error) {
 	}
 	comp, err := f.Component(l.Comp)
 	if err != nil {
-		return "", err
+		return "", nil
 	}
 	return comp.Get(l)
 }
