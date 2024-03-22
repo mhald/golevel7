@@ -270,3 +270,84 @@ func TestTaggedStructParsing(t *testing.T) {
 	assert.Equal(t, "", obr.Visit.Location.Facility)
 	assert.Equal(t, "2000^2012^01", obr.Visit.FullLocation)
 }
+
+// verifies we do not get a "Component out of range" when parsing
+func TestComponentOutOfRangeFix(t *testing.T) {
+	t.Logf("TestComponentOutOfRangeFix")
+	data, err := readFile("./testdata/msg6.hl7")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	msgs, err := NewDecoder(bytes.NewReader(data)).Messages()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assert.Equal(t, 1, len(msgs))
+
+	// NOTE: this layout for these structs only works with the older method of parsing (Unmarshal), the newer method
+	//  expects the struct to be only one level deep, otherwise it will only parse the first element of slices
+
+	type PatientId struct {
+		Id         string `hl7:"PID.3.1"`
+		IdTypeCode string `hl7:"PID.3.5"`
+	}
+	type PatientDetails struct {
+		GivenName string      `hl7:"PID.5.2"`
+		Sex       string      `hl7:"PID.8.1"`
+		IDs       []PatientId `hl7:"PID.3"`
+	}
+
+	// parse via the older method
+	patient := &PatientDetails{}
+	t.Logf("Unmarshalling via older method")
+	err = msgs[0].Unmarshal(patient)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("Patient: %#v", patient)
+	assert.Equal(t, "F", patient.Sex)
+	assert.Equal(t, "1", patient.IDs[0].Id)
+	assert.Equal(t, "2", patient.IDs[1].Id)
+}
+
+// TestStandardPatientIdParsing verifies that we can parse using nested structs for the patient ID
+func TestStandardPatientIdParsing(t *testing.T) {
+	t.Logf("TestStandardPatientIdParsing")
+	data, err := readFile("./testdata/msg6.hl7")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	msgs, err := NewDecoder(bytes.NewReader(data)).Messages()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assert.Equal(t, 1, len(msgs))
+
+	type PatientId struct {
+		Id         string `hl7:"PID.1"`
+		IdTypeCode string `hl7:"PID.5"`
+	}
+	type PatientDetails struct {
+		GivenName string      `hl7:"PID.5.2"`
+		Sex       string      `hl7:"PID.8.1"`
+		IDs       []PatientId `hl7:"PID.3"`
+	}
+	type Message struct {
+		Patient PatientDetails `hl7:"PID"`
+	}
+
+	patient := &Message{}
+	err = msgs[0].ToStruct(patient)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("Patient: %#v", patient)
+	assert.Equal(t, "Grace", patient.Patient.GivenName)
+	assert.Equal(t, "F", patient.Patient.Sex)
+	assert.Equal(t, "1", patient.Patient.IDs[0].Id)
+	assert.Equal(t, "2", patient.Patient.IDs[1].Id)
+}

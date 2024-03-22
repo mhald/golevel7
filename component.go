@@ -75,7 +75,7 @@ func (c *Component) Get(l *Location) (string, error) {
 	}
 	sc, err := c.SubComponent(l.SubComp)
 	if err != nil {
-		return "", err
+		return "", nil
 	}
 	return string(sc.Value), nil
 }
